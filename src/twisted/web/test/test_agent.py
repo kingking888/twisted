@@ -248,6 +248,25 @@ class FileBodyProducerTests(TestCase):
         self.failureResultOf(complete).trap(IOError)
 
 
+    def test_cancelWhileProducing(self):
+        """
+        When the L{Deferred} returned by L{FileBodyProducer.startProducing} is
+        cancelled, the input file is closed and the task is stopped.
+        """
+        expectedResult = b"hello, world"
+        readSize = 3
+        output = BytesIO()
+        consumer = FileConsumer(output)
+        inputFile = BytesIO(expectedResult)
+        producer = FileBodyProducer(inputFile, self.cooperator, readSize)
+        complete = producer.startProducing(consumer)
+        complete.cancel()
+        self.assertTrue(inputFile.closed)
+        self._scheduled.pop(0)()
+        self.assertEqual(b"", output.getvalue())
+        self.assertNoResult(complete)
+
+
     def test_stopProducing(self):
         """
         L{FileBodyProducer.stopProducing} stops the underlying L{IPullProducer}
@@ -317,6 +336,28 @@ class FileBodyProducerTests(TestCase):
         producer.resumeProducing()
         self._scheduled.pop(0)()
         self.assertEqual(expectedResult[:readSize * 2], output.getvalue())
+
+    def test_multipleStop(self):
+        """
+        L{FileBodyProducer.stopProducing} can be called more than once without
+        raising an exception.
+        """
+        expectedResult = b"test"
+        readSize = 3
+        output = BytesIO()
+        consumer = FileConsumer(output)
+        inputFile = BytesIO(expectedResult)
+        producer = FileBodyProducer(
+            inputFile, self.cooperator, readSize)
+        complete = producer.startProducing(consumer)
+        producer.stopProducing()
+        producer.stopProducing()
+        self.assertTrue(inputFile.closed)
+        self._scheduled.pop(0)()
+        self.assertEqual(b"", output.getvalue())
+        self.assertNoResult(complete)
+
+
 
 EXAMPLE_COM_IP = '127.0.0.7'
 EXAMPLE_COM_V6_IP = '::7'

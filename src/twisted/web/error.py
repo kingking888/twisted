@@ -6,7 +6,6 @@
 Exception definitions for L{twisted.web}.
 """
 
-from __future__ import division, absolute_import
 try:
     from future_builtins import ascii
 except ImportError:
@@ -297,6 +296,14 @@ class UnsupportedType(Exception):
     """
     During flattening, an object of a type which cannot be flattened was
     encountered.
+    """
+
+
+class ExcessiveBufferingError(Exception):
+    """
+    The HTTP/2 protocol has been forced to buffer an excessive amount of
+    outbound data, and has therefore closed the connection and dropped all
+    outbound data.
     """
 
 

@@ -5,9 +5,12 @@
 Test running processes with the APIs in L{twisted.internet.utils}.
 """
 
-from __future__ import division, absolute_import
 
-import warnings, os, stat, sys, signal
+import os
+import signal
+import stat
+import sys
+import warnings
 
 from twisted.python.compat import _PY3
 from twisted.python.runtime import platform
@@ -49,13 +52,8 @@ class ProcessUtilsTests(unittest.TestCase):
         scriptFile = self.makeSourceFile([
                 "import sys",
                 "for s in b'hello world\\n':",
-                "    if hasattr(sys.stdout, 'buffer'):",
-                "        # Python 3",
-                "        s = bytes([s])",
-                "        sys.stdout.buffer.write(s)",
-                "    else:",
-                "        # Python 2",
-                "        sys.stdout.write(s)",
+                "    s = bytes([s])",
+                "    sys.stdout.buffer.write(s)",
                 "    sys.stdout.flush()"])
         d = utils.getProcessOutput(self.exe, ['-u', scriptFile])
         return d.addCallback(self.assertEqual, b"hello world\n")
@@ -119,14 +117,8 @@ class ProcessUtilsTests(unittest.TestCase):
         """
         scriptFile = self.makeSourceFile([
             "import sys",
-            "if hasattr(sys.stdout, 'buffer'):",
-            "    # Python 3",
-            "    sys.stdout.buffer.write(b'hello world!\\n')",
-            "    sys.stderr.buffer.write(b'goodbye world!\\n')",
-            "else:",
-            "    # Python 2",
-            "    sys.stdout.write(b'hello world!\\n')",
-            "    sys.stderr.write(b'goodbye world!\\n')",
+            "sys.stdout.buffer.write(b'hello world!\\n')",
+            "sys.stderr.buffer.write(b'goodbye world!\\n')",
             "sys.exit(1)"
             ])
 
@@ -221,28 +213,29 @@ class ProcessUtilsTests(unittest.TestCase):
         os.makedirs(dir)
 
         scriptFile = self.makeSourceFile([
-                "import os, sys, stat",
-                # Fix the permissions so we can report the working directory.
-                # On macOS (and maybe elsewhere), os.getcwd() fails with EACCES
-                # if +x is missing from the working directory.
-                "os.chmod(%r, stat.S_IXUSR)" % (dir,),
-                "sys.stdout.write(os.getcwd())"])
+            "import os, sys",
+            "cdir = os.getcwd()",
+            "sys.stdout.write(cdir)"]
+        )
 
         # Switch to it, but make sure we switch back
         self.addCleanup(os.chdir, os.getcwd())
         os.chdir(dir)
 
-        # Get rid of all its permissions, but make sure they get cleaned up
-        # later, because otherwise it might be hard to delete the trial
-        # temporary directory.
-        self.addCleanup(
-            os.chmod, dir, stat.S_IMODE(os.stat('.').st_mode))
-        os.chmod(dir, 0)
+        # Remember its default permissions.
+        originalMode = stat.S_IMODE(os.stat('.').st_mode)
 
-        # Pass in -S so that if run using the coverage .pth trick, it won't be
-        # loaded and cause Coverage to try and get the current working
-        # directory (see the comments above why this can be a problem) on OSX.
-        d = utilFunc(self.exe, ['-S', '-u', scriptFile])
+        # On macOS Catalina (and maybe elsewhere), os.getcwd() sometimes fails
+        # with EACCES if u+rx is missing from the working directory, so don't
+        # reduce it further than this.
+        os.chmod(dir, stat.S_IXUSR | stat.S_IRUSR)
+
+        # Restore the permissions to their original state later (probably
+        # adding at least u+w), because otherwise it might be hard to delete
+        # the trial temporary directory.
+        self.addCleanup(os.chmod, dir, originalMode)
+
+        d = utilFunc(self.exe, ['-u', scriptFile])
         d.addCallback(check, dir.encode(sys.getfilesystemencoding()))
         return d
 
